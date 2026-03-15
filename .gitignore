@@ -20,3 +20,7 @@ Thumbs.db
 
 # uv
 *.lock
+.gradle/
+android/.gradle/
+android/app/build/
+local.properties
