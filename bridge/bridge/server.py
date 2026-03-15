@@ -138,7 +138,11 @@ async def on_shutdown_mdns(app: web.Application) -> None:
             logger.warning("mDNS unregistration failed: %s", exc)
 
 
-def create_app(instance_name: str = "default", port: int = 4001) -> web.Application:
+def create_app(
+    instance_name: str = "default",
+    port: int = 4001,
+    enable_mdns: bool = True,
+) -> web.Application:
     """Create and configure the aiohttp application."""
     app = web.Application()
     app["instance_name"] = instance_name
@@ -152,8 +156,9 @@ def create_app(instance_name: str = "default", port: int = 4001) -> web.Applicat
     app.router.add_get("/events", sse_handler)
     app.router.add_get("/status", status_handler)
 
-    app.on_startup.append(on_startup_mdns)
-    app.on_shutdown.append(on_shutdown_mdns)
+    if enable_mdns:
+        app.on_startup.append(on_startup_mdns)
+        app.on_shutdown.append(on_shutdown_mdns)
 
     return app
 
@@ -164,10 +169,15 @@ def main() -> None:
     parser.add_argument("--port", type=int, default=4001, help="Port to listen on")
     parser.add_argument("--host", default="0.0.0.0", help="Host to bind to")
     parser.add_argument("--name", default=None, help="Instance name (default: hostname)")
+    parser.add_argument("--no-mdns", action="store_true", help="Disable mDNS announcement")
     args = parser.parse_args()
 
     instance_name = args.name or socket.gethostname()
-    app = create_app(instance_name=instance_name, port=args.port)
+    app = create_app(
+        instance_name=instance_name,
+        port=args.port,
+        enable_mdns=not args.no_mdns,
+    )
 
     logging.basicConfig(level=logging.INFO)
     logger.info("Starting bridge on %s:%d as '%s'", args.host, args.port, instance_name)
