@@ -51,6 +51,7 @@ dependencies {
     implementation(libs.okhttp.eventsource)
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.kotlinx.coroutines.android)
+    implementation("com.android.billingclient:billing-ktx:8.3.0")
 
     debugImplementation(libs.androidx.ui.tooling)
 
