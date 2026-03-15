@@ -9,6 +9,18 @@ from enum import StrEnum
 from typing import Any
 
 
+@dataclass
+class SubAgent:
+    """A sub-agent spawned by the main Claude Code session."""
+
+    agent_id: str
+    agent_type: str
+    status: str  # "running" or "completed"
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"agent_id": self.agent_id, "agent_type": self.agent_type, "status": self.status}
+
+
 class AgentState(StrEnum):
     IDLE = "idle"
     THINKING = "thinking"
@@ -57,6 +69,7 @@ class StatusUpdate:
     requires_input: bool = False
     agent_id: str | None = None
     agent_type: str | None = None
+    sub_agents: list[SubAgent] = field(default_factory=list)
     ts: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
     @classmethod
@@ -82,6 +95,7 @@ class StatusUpdate:
         d = asdict(self)
         d["v"] = 1
         d["status"] = str(self.status)
+        d["sub_agents"] = [sa.to_dict() for sa in self.sub_agents]
         return d
 
     def to_json(self) -> str:

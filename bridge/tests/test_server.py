@@ -194,3 +194,92 @@ async def test_session_state_overwritten_by_latest_event(client: TestClient) -> 
     resp = await client.get("/status")
     data = await resp.json()
     assert data["sess-overwrite"]["status"] == "complete"
+
+
+@pytest.mark.asyncio
+async def test_subagent_start_tracked(client: TestClient) -> None:
+    """POST SubagentStart event, verify /status includes sub_agents list."""
+    event = {
+        "hook_event_name": "SubagentStart",
+        "session_id": "sess-sub-1",
+        "agent_id": "agent-alpha",
+        "agent_type": "code_review",
+    }
+    resp = await client.post("/event", json=event)
+    assert resp.status == 202
+
+    resp = await client.get("/status")
+    data = await resp.json()
+
+    assert "sess-sub-1" in data
+    session = data["sess-sub-1"]
+    assert "sub_agents" in session
+    assert len(session["sub_agents"]) == 1
+
+    sa = session["sub_agents"][0]
+    assert sa["agent_id"] == "agent-alpha"
+    assert sa["agent_type"] == "code_review"
+    assert sa["status"] == "running"
+
+
+@pytest.mark.asyncio
+async def test_subagent_stop_removes(client: TestClient) -> None:
+    """POST SubagentStart then SubagentStop, verify agent removed from /status."""
+    start_event = {
+        "hook_event_name": "SubagentStart",
+        "session_id": "sess-sub-2",
+        "agent_id": "agent-beta",
+        "agent_type": "test_runner",
+    }
+    stop_event = {
+        "hook_event_name": "SubagentStop",
+        "session_id": "sess-sub-2",
+        "agent_id": "agent-beta",
+        "agent_type": "test_runner",
+    }
+
+    await client.post("/event", json=start_event)
+
+    # Verify it was tracked
+    resp = await client.get("/status")
+    data = await resp.json()
+    assert len(data["sess-sub-2"]["sub_agents"]) == 1
+
+    # Now stop it
+    await client.post("/event", json=stop_event)
+
+    resp = await client.get("/status")
+    data = await resp.json()
+    assert len(data["sess-sub-2"]["sub_agents"]) == 0
+
+
+@pytest.mark.asyncio
+async def test_multiple_subagents_tracked(client: TestClient) -> None:
+    """Multiple sub-agents are tracked simultaneously; stopping one leaves others."""
+    events = [
+        {"hook_event_name": "SubagentStart", "session_id": "sess-multi",
+         "agent_id": "agent-1", "agent_type": "worker"},
+        {"hook_event_name": "SubagentStart", "session_id": "sess-multi",
+         "agent_id": "agent-2", "agent_type": "reviewer"},
+        {"hook_event_name": "SubagentStart", "session_id": "sess-multi",
+         "agent_id": "agent-3", "agent_type": "tester"},
+    ]
+    for ev in events:
+        await client.post("/event", json=ev)
+
+    resp = await client.get("/status")
+    data = await resp.json()
+    assert len(data["sess-multi"]["sub_agents"]) == 3
+
+    # Stop agent-2
+    await client.post("/event", json={
+        "hook_event_name": "SubagentStop", "session_id": "sess-multi",
+        "agent_id": "agent-2", "agent_type": "reviewer",
+    })
+
+    resp = await client.get("/status")
+    data = await resp.json()
+    sub_agents = data["sess-multi"]["sub_agents"]
+    assert len(sub_agents) == 2
+    agent_ids = {sa["agent_id"] for sa in sub_agents}
+    assert agent_ids == {"agent-1", "agent-3"}

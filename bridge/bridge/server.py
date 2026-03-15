@@ -17,7 +17,7 @@ from aiohttp import web
 from aiohttp_sse import sse_response
 
 from bridge.mdns import register_service, unregister_service
-from bridge.models import HookEvent, StatusUpdate
+from bridge.models import HookEvent, StatusUpdate, SubAgent
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +38,20 @@ async def event_handler(request: web.Request) -> web.Response:
         return web.json_response({"error": "invalid JSON"}, status=400)
 
     hook_event = HookEvent.from_dict(raw)
+
+    # Track sub-agent lifecycle
+    active_agents: dict[str, SubAgent] = request.app["active_agents"]
+    if hook_event.event_name == "SubagentStart" and hook_event.agent_id:
+        active_agents[hook_event.agent_id] = SubAgent(
+            agent_id=hook_event.agent_id,
+            agent_type=hook_event.agent_type or "unknown",
+            status="running",
+        )
+    elif hook_event.event_name == "SubagentStop" and hook_event.agent_id:
+        active_agents.pop(hook_event.agent_id, None)
+
     update = StatusUpdate.from_event(hook_event, instance_name=request.app["instance_name"])
+    update.sub_agents = list(active_agents.values())
 
     # Store by session_id
     request.app["sessions"][update.session_id] = update
@@ -130,6 +143,7 @@ def create_app(instance_name: str = "default", port: int = 4001) -> web.Applicat
     app = web.Application()
     app["instance_name"] = instance_name
     app["sessions"] = {}  # dict[str, StatusUpdate]
+    app["active_agents"] = {}  # dict[str, SubAgent]
     app["sse_clients"] = set()  # set[asyncio.Queue[str]]
     app["port"] = port
 
