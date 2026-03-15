@@ -34,7 +34,7 @@ fun SettingsScreen(
             .padding(24.dp),
     ) {
         Text(
-            text = "Claude ScreenSaver",
+            text = "Agent ScreenSaver",
             style = MaterialTheme.typography.headlineMedium,
             color = MaterialTheme.colorScheme.onBackground,
         )
@@ -140,7 +140,7 @@ fun SettingsScreen(
 
         // Hint about screensaver
         Text(
-            text = "Tip: Go to Settings > Display > Screen Saver to enable Claude Code Status as your screensaver.",
+            text = "Tip: Go to Settings > Display > Screen Saver to enable Agent Code Status as your screensaver.",
             style = MaterialTheme.typography.labelSmall,
             color = ClaudeGray,
         )

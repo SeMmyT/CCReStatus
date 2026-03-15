@@ -106,7 +106,7 @@ fun StatusDashboardScreen(
                     )
                     Spacer(Modifier.width(8.dp))
                     Text(
-                        text = "Claude Code",
+                        text = "Agent Code",
                         style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.onBackground,
                     )
