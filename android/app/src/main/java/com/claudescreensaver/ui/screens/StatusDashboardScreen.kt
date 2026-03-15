@@ -1,5 +1,6 @@
 package com.claudescreensaver.ui.screens
 
+import android.content.res.Configuration
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -8,6 +9,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.claudescreensaver.data.models.AgentState
@@ -89,17 +91,18 @@ fun StatusDashboardScreen(
                 )
             }
 
+            val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
+
             if (activeSessions.size > 1) {
-                // 2x2 grid of session cards
-                val rows = activeSessions.chunked(2)
-                rows.forEach { row ->
+                if (isLandscape) {
+                    // Landscape: single row of up to 4 cards
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .weight(1f),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        row.forEach { session ->
+                        activeSessions.forEach { session ->
                             SessionCard(
                                 status = session,
                                 modifier = Modifier
@@ -108,9 +111,29 @@ fun StatusDashboardScreen(
                                     .padding(vertical = 4.dp),
                             )
                         }
-                        // Fill empty slots in last row
-                        if (row.size < 2) {
-                            Spacer(Modifier.weight(1f))
+                    }
+                } else {
+                    // Portrait: 2x2 grid
+                    val rows = activeSessions.chunked(2)
+                    rows.forEach { row ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(1f),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            row.forEach { session ->
+                                SessionCard(
+                                    status = session,
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .fillMaxHeight()
+                                        .padding(vertical = 4.dp),
+                                )
+                            }
+                            if (row.size < 2) {
+                                Spacer(Modifier.weight(1f))
+                            }
                         }
                     }
                 }
