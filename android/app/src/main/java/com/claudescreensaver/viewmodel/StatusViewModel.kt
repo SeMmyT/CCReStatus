@@ -1,0 +1,45 @@
+package com.claudescreensaver.viewmodel
+
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.claudescreensaver.data.models.AgentStatus
+import com.claudescreensaver.data.network.ConnectionState
+import com.claudescreensaver.data.network.SseClient
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.stateIn
+
+data class UiState(
+    val agentStatus: AgentStatus = AgentStatus.DISCONNECTED,
+    val connectionState: ConnectionState = ConnectionState.DISCONNECTED,
+)
+
+class StatusViewModel(
+    private val sseClient: SseClient = SseClient()
+) : ViewModel() {
+
+    val uiState: StateFlow<UiState> = combine(
+        sseClient.status,
+        sseClient.connectionState,
+    ) { status, conn ->
+        UiState(agentStatus = status, connectionState = conn)
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = UiState(),
+    )
+
+    fun connect(url: String) {
+        sseClient.connect(url)
+    }
+
+    fun disconnect() {
+        sseClient.disconnect()
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        sseClient.disconnect()
+    }
+}
