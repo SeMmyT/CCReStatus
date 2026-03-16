@@ -50,3 +50,10 @@ val StatusCaution = Color(0xFFFCE83A)
 val StatusWarning = Color(0xFFFFB302)
 val StatusCritical = Color(0xFFFF3838)
 val StatusDisabled = Color(0xFFA4ABB6)
+
+/** Context window usage color: green < 70%, yellow 70-89%, red >= 90%. */
+fun contextBarColor(pct: Float): Color = when {
+    pct >= 90f -> StatusCritical
+    pct >= 70f -> StatusWarning
+    else -> StatusRunning
+}

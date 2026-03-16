@@ -17,9 +17,22 @@ from aiohttp import web
 from aiohttp_sse import sse_response
 
 from bridge.mdns import register_service, unregister_service
-from bridge.models import AgentState, HookEvent, StatusUpdate, SubAgent
+from bridge.models import AgentState, HookEvent, METRIC_FIELDS, StatusUpdate, SubAgent
 
 logger = logging.getLogger(__name__)
+
+
+def _broadcast(app: web.Application, payload: str) -> None:
+    """Fan out a payload to all SSE clients, pruning dead queues."""
+    dead: list[asyncio.Queue[str]] = []
+    for queue in app["sse_clients"]:
+        try:
+            queue.put_nowait(payload)
+        except asyncio.QueueFull:
+            dead.append(queue)
+    for q in dead:
+        app["sse_clients"].discard(q)
+        logger.warning("Dropped SSE client due to full queue")
 
 
 async def health_handler(request: web.Request) -> web.Response:
@@ -89,17 +102,7 @@ async def event_handler(request: web.Request) -> web.Response:
     request.app["sessions"][update.session_id] = update
 
     # Fan out to SSE clients
-    payload = update.to_json()
-    dead_queues: list[asyncio.Queue[str]] = []
-    for queue in request.app["sse_clients"]:
-        try:
-            queue.put_nowait(payload)
-        except asyncio.QueueFull:
-            dead_queues.append(queue)
-
-    for q in dead_queues:
-        request.app["sse_clients"].discard(q)
-        logger.warning("Dropped SSE client due to full queue")
+    _broadcast(request.app, update.to_json())
 
     return web.json_response({"accepted": True}, status=202)
 
@@ -125,22 +128,20 @@ async def metrics_handler(request: web.Request) -> web.Response:
         )
         sessions[session_id] = update
 
-    # Merge metrics (only if present in request)
-    metric_fields = (
-        "context_percent", "cost_usd", "model", "cwd",
-        "lines_added", "lines_removed", "duration_ms", "api_duration_ms",
-    )
-    for field_name in metric_fields:
-        if field_name in data:
-            setattr(update, field_name, data[field_name])
+    # Merge metrics with type validation and dirty check
+    changed = False
+    for field_name, expected_types in METRIC_FIELDS.items():
+        if field_name not in data:
+            continue
+        val = data[field_name]
+        if val is not None and not isinstance(val, expected_types):
+            continue  # skip mistyped values silently
+        if getattr(update, field_name) != val:
+            setattr(update, field_name, val)
+            changed = True
 
-    # Fan out enriched update to SSE clients
-    payload = update.to_json()
-    for queue in request.app["sse_clients"]:
-        try:
-            queue.put_nowait(payload)
-        except asyncio.QueueFull:
-            pass
+    if changed:
+        _broadcast(request.app, update.to_json())
 
     return web.json_response({"accepted": True}, status=202)
 
@@ -209,11 +210,7 @@ async def input_submit_handler(request: web.Request) -> web.Response:
         "session_id": session_id,
         "text": text,
     })
-    for queue in request.app["sse_clients"]:
-        try:
-            queue.put_nowait(f"INPUT:{notification}")
-        except asyncio.QueueFull:
-            pass
+    _broadcast(request.app, f"INPUT:{notification}")
 
     logger.info("Input queued for session %s: %s", session_id[:8], text[:50])
     return web.json_response({"accepted": True, "session_id": session_id}, status=202)

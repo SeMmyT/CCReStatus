@@ -52,6 +52,13 @@ data class AgentStatus(
     val cwdShort: String?
         get() = cwd?.substringAfterLast('/')?.takeIf { it.isNotEmpty() }
 
+    val costFormatted: String?
+        get() = costUsd?.let { "$${String.format(java.util.Locale.US, "%.2f", it)}" }
+
+    val churnFormatted: String?
+        get() = if (linesAdded != null || linesRemoved != null)
+            "+${linesAdded ?: 0}/-${linesRemoved ?: 0}" else null
+
     companion object {
         fun fromJson(json: String): AgentStatus {
             val obj = JSONObject(json)

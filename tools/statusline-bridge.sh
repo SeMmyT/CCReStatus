@@ -39,5 +39,10 @@ if [ -n "$SESSION_ID" ]; then
     >/dev/null 2>&1 &
 fi
 
-# Pass through to ccstatusline for terminal display
-echo "$INPUT" | npx -y ccstatusline@latest
+# Pass through to ccstatusline for terminal display.
+# Use installed binary if available (avoids npm registry check on every tick).
+if command -v ccstatusline >/dev/null 2>&1; then
+  echo "$INPUT" | ccstatusline
+else
+  echo "$INPUT" | npx -y ccstatusline@latest
+fi

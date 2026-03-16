@@ -88,6 +88,7 @@ class StatusUpdate:
     sub_agents: list[SubAgent] = field(default_factory=list)
     ts: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     # Statusline metrics (populated via /session/{id}/metrics endpoint)
+    # Field names and types defined in METRIC_FIELDS below.
     context_percent: float | None = None
     cost_usd: float | None = None
     model: str | None = None
@@ -139,24 +140,27 @@ class StatusUpdate:
         d["v"] = 1
         d["status"] = str(self.status)
         d["sub_agents"] = [sa.to_dict() for sa in self.sub_agents]
-        # Nest metric fields under "metrics" key
-        d["metrics"] = {
-            "context_percent": self.context_percent,
-            "cost_usd": self.cost_usd,
-            "model": self.model,
-            "cwd": self.cwd,
-            "lines_added": self.lines_added,
-            "lines_removed": self.lines_removed,
-            "duration_ms": self.duration_ms,
-            "api_duration_ms": self.api_duration_ms,
-        }
-        for k in ("context_percent", "cost_usd", "model", "cwd",
-                   "lines_added", "lines_removed", "duration_ms", "api_duration_ms"):
+        d["metrics"] = {k: getattr(self, k) for k in METRIC_FIELDS}
+        for k in METRIC_FIELDS:
             d.pop(k, None)
         return d
 
     def to_json(self) -> str:
         return json.dumps(self.to_dict())
+
+
+# Canonical list of metric field names and their expected types.
+# Used by StatusUpdate.to_dict(), metrics_handler, and type validation.
+METRIC_FIELDS: dict[str, type] = {
+    "context_percent": (int, float),
+    "cost_usd": (int, float),
+    "model": str,
+    "cwd": str,
+    "lines_added": (int, float),
+    "lines_removed": (int, float),
+    "duration_ms": (int, float),
+    "api_duration_ms": (int, float),
+}
 
 
 def _derive_status(event: HookEvent) -> AgentState:

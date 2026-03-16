@@ -307,13 +307,13 @@ private fun SimpleAsciiPane(
                     if (isNotEmpty()) append(" ")
                     append("ctx:${it.toInt()}%")
                 }
-                status.costUsd?.let {
+                status.costFormatted?.let {
                     if (isNotEmpty()) append(" ")
-                    append("$${String.format("%.2f", it)}")
+                    append(it)
                 }
-                if (status.linesAdded != null) {
+                status.churnFormatted?.let {
                     if (isNotEmpty()) append(" ")
-                    append("+${status.linesAdded}/-${status.linesRemoved ?: 0}")
+                    append(it)
                 }
             }
             if (metrics.isNotEmpty()) {
