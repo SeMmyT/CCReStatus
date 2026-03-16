@@ -204,6 +204,44 @@ async def customize_handler(request: web.Request) -> web.Response:
     return web.json_response({"accepted": True, "session_id": session_id}, status=200)
 
 
+async def skins_list_handler(request: web.Request) -> web.Response:
+    """GET /skins — list available community skins."""
+    from bridge.skins import list_skins
+    return web.json_response(list_skins())
+
+
+async def skin_get_handler(request: web.Request) -> web.Response:
+    """GET /skins/{skin_id} — get full skin data."""
+    from bridge.skins import get_skin
+    skin_id = request.match_info["skin_id"]
+    data = get_skin(skin_id)
+    if data is None:
+        return web.json_response({"error": "not found"}, status=404)
+    return web.json_response(data)
+
+
+async def skin_upload_handler(request: web.Request) -> web.Response:
+    """POST /skins — upload a community skin."""
+    from bridge.skins import save_skin
+    try:
+        data = await request.json()
+    except (json.JSONDecodeError, Exception):
+        return web.json_response({"error": "invalid JSON"}, status=400)
+    if "id" not in data or "name" not in data:
+        return web.json_response({"error": "missing id or name"}, status=400)
+    skin_id = save_skin(data)
+    return web.json_response({"accepted": True, "id": skin_id}, status=201)
+
+
+async def skin_delete_handler(request: web.Request) -> web.Response:
+    """DELETE /skins/{skin_id} — remove a community skin."""
+    from bridge.skins import delete_skin
+    skin_id = request.match_info["skin_id"]
+    if delete_skin(skin_id):
+        return web.json_response({"deleted": True})
+    return web.json_response({"error": "not found or protected"}, status=404)
+
+
 async def on_startup_mdns(app: web.Application) -> None:
     """Register mDNS service on startup (non-fatal if fails)."""
     try:
@@ -252,6 +290,10 @@ def create_app(
     app.router.add_post("/session/{session_id}/input", input_submit_handler)
     app.router.add_get("/session/{session_id}/input", input_poll_handler)
     app.router.add_post("/session/{session_id}/customize", customize_handler)
+    app.router.add_get("/skins", skins_list_handler)
+    app.router.add_get("/skins/{skin_id}", skin_get_handler)
+    app.router.add_post("/skins", skin_upload_handler)
+    app.router.add_delete("/skins/{skin_id}", skin_delete_handler)
 
     if enable_mdns:
         app.on_startup.append(on_startup_mdns)
