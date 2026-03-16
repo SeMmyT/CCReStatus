@@ -29,7 +29,7 @@ fun OnboardingScreen(
     onTryDemo: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    // Breathing animation for Clawd
+    // Breathing animation for Ghost mascot
     val infiniteTransition = rememberInfiniteTransition(label = "onboarding")
     val breatheScale by infiniteTransition.animateFloat(
         initialValue = 0.95f,

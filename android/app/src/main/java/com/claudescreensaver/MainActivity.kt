@@ -251,6 +251,9 @@ class MainActivity : ComponentActivity() {
                             onFetchSkin = { skinId, callback ->
                                 viewModel.sseClient.fetchSkinJson(skinId, callback)
                             },
+                            onUploadSkin = { json, callback ->
+                                viewModel.sseClient.uploadSkin(json, callback)
+                            },
                             onBack = { currentScreen = "settings" },
                             onUpgradeToPro = { currentScreen = "paywall" },
                         )

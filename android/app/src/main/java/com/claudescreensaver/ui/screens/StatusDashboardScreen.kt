@@ -100,7 +100,7 @@ fun StatusDashboardScreen(
                 .offset { IntOffset(offsetX.roundToInt(), offsetY.roundToInt()) }
                 .padding(8.dp),
         ) {
-            // Top bar: Clawd + connection badge (hidden in free tier)
+            // Top bar: Ghost mascot + connection badge
             if (isPro) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,

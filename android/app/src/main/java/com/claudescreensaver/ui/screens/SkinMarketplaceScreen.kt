@@ -37,6 +37,7 @@ fun SkinMarketplaceScreen(
     activeSkinId: String,
     isPro: Boolean,
     onFetchSkin: (String, (String?) -> Unit) -> Unit,
+    onUploadSkin: (String, (Boolean) -> Unit) -> Unit,
     onBack: () -> Unit,
     onUpgradeToPro: () -> Unit,
     modifier: Modifier = Modifier,
@@ -70,7 +71,29 @@ fun SkinMarketplaceScreen(
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Bold,
                 color = ClaudeAccent,
+                modifier = Modifier.weight(1f),
             )
+            if (isPro && activeSkinId != "ghost") {
+                var uploading by remember { mutableStateOf(false) }
+                val activeSkin = installedSkins.find { it.id == activeSkinId }
+                if (activeSkin != null) {
+                    Button(
+                        onClick = {
+                            uploading = true
+                            onUploadSkin(activeSkin.toJson()) { uploading = false }
+                        },
+                        enabled = !uploading,
+                        colors = ButtonDefaults.buttonColors(containerColor = ClaudeAccentDeep),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                    ) {
+                        Text(
+                            text = if (uploading) "..." else "Share",
+                            fontFamily = mono,
+                            fontSize = 11.sp,
+                        )
+                    }
+                }
+            }
         }
 
         Spacer(Modifier.height(16.dp))
