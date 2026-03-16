@@ -17,7 +17,7 @@ from aiohttp import web
 from aiohttp_sse import sse_response
 
 from bridge.mdns import register_service, unregister_service
-from bridge.models import HookEvent, StatusUpdate, SubAgent
+from bridge.models import AgentState, HookEvent, StatusUpdate, SubAgent
 
 logger = logging.getLogger(__name__)
 
@@ -100,6 +100,47 @@ async def event_handler(request: web.Request) -> web.Response:
     for q in dead_queues:
         request.app["sse_clients"].discard(q)
         logger.warning("Dropped SSE client due to full queue")
+
+    return web.json_response({"accepted": True}, status=202)
+
+
+async def metrics_handler(request: web.Request) -> web.Response:
+    """POST /session/{session_id}/metrics — update session metrics from statusline."""
+    session_id = request.match_info["session_id"]
+    try:
+        data = await request.json()
+    except (json.JSONDecodeError, Exception):
+        return web.json_response({"error": "invalid JSON"}, status=400)
+
+    sessions: dict[str, StatusUpdate] = request.app["sessions"]
+    update = sessions.get(session_id)
+
+    if update is None:
+        # Create a minimal placeholder session
+        update = StatusUpdate(
+            status=AgentState.THINKING,
+            session_id=session_id,
+            instance_name=request.app["instance_name"],
+            event="statusline",
+        )
+        sessions[session_id] = update
+
+    # Merge metrics (only if present in request)
+    metric_fields = (
+        "context_percent", "cost_usd", "model", "cwd",
+        "lines_added", "lines_removed", "duration_ms", "api_duration_ms",
+    )
+    for field_name in metric_fields:
+        if field_name in data:
+            setattr(update, field_name, data[field_name])
+
+    # Fan out enriched update to SSE clients
+    payload = update.to_json()
+    for queue in request.app["sse_clients"]:
+        try:
+            queue.put_nowait(payload)
+        except asyncio.QueueFull:
+            pass
 
     return web.json_response({"accepted": True}, status=202)
 
@@ -287,6 +328,7 @@ def create_app(
     app.router.add_post("/event", event_handler)
     app.router.add_get("/events", sse_handler)
     app.router.add_get("/status", status_handler)
+    app.router.add_post("/session/{session_id}/metrics", metrics_handler)
     app.router.add_post("/session/{session_id}/input", input_submit_handler)
     app.router.add_get("/session/{session_id}/input", input_poll_handler)
     app.router.add_post("/session/{session_id}/customize", customize_handler)

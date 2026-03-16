@@ -371,6 +371,103 @@ async def test_customize_endpoint(client: TestClient) -> None:
 
 
 @pytest.mark.asyncio
+async def test_metrics_endpoint_enriches_session(client: TestClient) -> None:
+    """POST /session/{id}/metrics merges metrics into existing session."""
+    # First create a session via event
+    event = {
+        "hook_event_name": "PreToolUse",
+        "session_id": "metrics-test",
+        "tool_name": "Bash",
+        "tool_input": {"command": "npm test"},
+    }
+    await client.post("/event", json=event)
+
+    # Post metrics
+    metrics = {
+        "context_percent": 42.5,
+        "cost_usd": 0.18,
+        "model": "Claude Opus 4.6",
+        "cwd": "/home/user/project",
+        "lines_added": 50,
+        "lines_removed": 10,
+        "duration_ms": 30000,
+        "api_duration_ms": 20000,
+    }
+    resp = await client.post("/session/metrics-test/metrics", json=metrics)
+    assert resp.status == 202
+
+    # Verify metrics are in status snapshot
+    resp = await client.get("/status")
+    data = await resp.json()
+    m = data["metrics-test"]["metrics"]
+    assert m["context_percent"] == 42.5
+    assert m["cost_usd"] == 0.18
+    assert m["model"] == "Claude Opus 4.6"
+    assert m["cwd"] == "/home/user/project"
+    assert m["lines_added"] == 50
+    assert m["lines_removed"] == 10
+    assert m["duration_ms"] == 30000
+    assert m["api_duration_ms"] == 20000
+
+
+@pytest.mark.asyncio
+async def test_metrics_without_session_creates_placeholder(client: TestClient) -> None:
+    """POST /session/{id}/metrics works even if session doesn't exist yet."""
+    metrics = {"context_percent": 10.0, "model": "Claude Sonnet 4.6"}
+    resp = await client.post("/session/new-session/metrics", json=metrics)
+    assert resp.status == 202
+
+    # Verify session was created with metrics
+    resp = await client.get("/status")
+    data = await resp.json()
+    assert "new-session" in data
+    m = data["new-session"]["metrics"]
+    assert m["context_percent"] == 10.0
+    assert m["model"] == "Claude Sonnet 4.6"
+
+
+@pytest.mark.asyncio
+async def test_metrics_partial_update(client: TestClient) -> None:
+    """POST /session/{id}/metrics only updates provided fields, preserves others."""
+    # Create session with initial metrics
+    await client.post("/event", json={
+        "hook_event_name": "PreToolUse",
+        "session_id": "partial-metrics",
+        "tool_name": "Bash",
+        "tool_input": {"command": "test"},
+    })
+    await client.post("/session/partial-metrics/metrics", json={
+        "context_percent": 20.0,
+        "cost_usd": 0.05,
+        "model": "Claude Opus 4.6",
+    })
+
+    # Update only cost — context_percent and model should be preserved
+    resp = await client.post("/session/partial-metrics/metrics", json={
+        "cost_usd": 0.12,
+    })
+    assert resp.status == 202
+
+    resp = await client.get("/status")
+    data = await resp.json()
+    m = data["partial-metrics"]["metrics"]
+    assert m["context_percent"] == 20.0  # preserved
+    assert m["cost_usd"] == 0.12  # updated
+    assert m["model"] == "Claude Opus 4.6"  # preserved
+
+
+@pytest.mark.asyncio
+async def test_metrics_bad_json_returns_400(client: TestClient) -> None:
+    """POST /session/{id}/metrics with invalid JSON returns 400."""
+    resp = await client.post(
+        "/session/bad-json/metrics",
+        data=b"not valid json",
+        headers={"Content-Type": "application/json"},
+    )
+    assert resp.status == 400
+
+
+@pytest.mark.asyncio
 async def test_custom_frames_in_event(client: TestClient) -> None:
     """Custom frames sent directly in event payload are forwarded."""
     await client.post("/event", json={
