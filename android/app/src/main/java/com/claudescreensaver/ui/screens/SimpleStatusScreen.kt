@@ -28,7 +28,6 @@ import kotlin.math.roundToInt
 @Composable
 fun SimpleStatusScreen(
     uiState: UiState,
-    isPro: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
     // Burn-in prevention: Lissajous pixel shift
@@ -52,7 +51,7 @@ fun SimpleStatusScreen(
         label = "shiftY",
     )
 
-    val maxPanes = if (isPro) 4 else 1
+    val maxPanes = 10
     val activeSessions = uiState.sessions.values
         .sortedByDescending { it.timestamp }
         .take(maxPanes)

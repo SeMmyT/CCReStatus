@@ -1,6 +1,14 @@
 package com.claudescreensaver.ui.screens
 
+import android.Manifest
+import android.app.Activity
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.speech.RecognizerIntent
+import android.speech.SpeechRecognizer
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -23,12 +31,14 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import com.claudescreensaver.data.models.AgentState
 import com.claudescreensaver.data.models.AgentStatus
 import com.claudescreensaver.ui.components.ContextProgressBar
@@ -43,7 +53,6 @@ fun SessionFullScreen(
     status: AgentStatus,
     onBack: () -> Unit,
     onSendInput: (String) -> Unit,
-    isPro: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
     var showInput by remember { mutableStateOf(false) }
@@ -51,12 +60,51 @@ fun SessionFullScreen(
     val focusRequester = remember { FocusRequester() }
     val scrollState = rememberScrollState()
     val mono = FontFamily.Monospace
+    val context = LocalContext.current
+
+    // Voice input via Android speech recognizer
+    val voiceLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            val text = result.data
+                ?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
+                ?.firstOrNull() ?: ""
+            if (text.isNotBlank()) {
+                onSendInput(text)
+            }
+        }
+    }
+
+    val micPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                putExtra(RecognizerIntent.EXTRA_PROMPT, "Speak your message...")
+            }
+            voiceLauncher.launch(intent)
+        }
+    }
+
+    fun launchVoiceInput() {
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+            val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                putExtra(RecognizerIntent.EXTRA_PROMPT, "Speak your message...")
+            }
+            voiceLauncher.launch(intent)
+        } else {
+            micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+        }
+    }
     val termBg = Color(0xFF0D0D0D)
     val termBorder = Color(0xFF2A2A2A)
 
-    val canInput = isPro && (status.state == AgentState.COMPLETE ||
+    val canInput = status.state == AgentState.COMPLETE ||
             status.state == AgentState.AWAITING_INPUT ||
-            status.state == AgentState.IDLE)
+            status.state == AgentState.IDLE
 
     // Back handler: if input is showing, hide it; otherwise go back to grid
     BackHandler {
@@ -385,6 +433,16 @@ fun SessionFullScreen(
                             .noRippleClickable { showInput = true },
                     )
                 }
+                // Mic button — always visible when input is possible
+                Spacer(Modifier.width(4.dp))
+                Text(
+                    text = "\uD83C\uDF99",  // microphone emoji
+                    fontSize = 20.sp,
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .noRippleClickable { launchVoiceInput() }
+                        .padding(4.dp),
+                )
             }
         }
     }

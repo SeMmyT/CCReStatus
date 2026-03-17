@@ -72,7 +72,10 @@ fun SessionCard(
         AgentState.COMPLETE -> "done"
     }
 
-    val shortId = status.sessionId.take(8)
+    val tabName = status.cwd?.let { path ->
+        val parts = path.trimEnd('/').split('/')
+        parts.takeLast(2).joinToString("/")
+    } ?: status.sessionId.take(8)
     val mono = FontFamily.Monospace
     val termBg = Color(0xFF0D0D0D)
     val termBorder = Color(0xFF2A2A2A)
@@ -97,7 +100,7 @@ fun SessionCard(
             Box(Modifier.size(8.dp).clip(CircleShape).background(animatedColor.copy(alpha = 0.4f)))
             Spacer(Modifier.width(8.dp))
             Text(
-                text = "$shortId — $stateLabel",
+                text = "$tabName — $stateLabel",
                 fontFamily = mono,
                 fontSize = 10.sp,
                 color = ClaudeGray,

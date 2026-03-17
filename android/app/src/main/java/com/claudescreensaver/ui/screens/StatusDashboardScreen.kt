@@ -31,13 +31,12 @@ import kotlin.math.roundToInt
 @Composable
 fun StatusDashboardScreen(
     uiState: UiState,
-    isPro: Boolean = true,
     displayMode: String = "advanced",
     onSessionTap: ((String) -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     if (displayMode == "simple") {
-        SimpleStatusScreen(uiState = uiState, isPro = isPro, modifier = modifier)
+        SimpleStatusScreen(uiState = uiState, modifier = modifier)
         return
     }
 
@@ -62,7 +61,7 @@ fun StatusDashboardScreen(
         label = "shiftY",
     )
 
-    val maxPanes = if (isPro) 4 else 1
+    val maxPanes = 10
     val activeSessions = uiState.sessions.values
         .sortedByDescending { it.timestamp }
         .take(maxPanes)
@@ -101,38 +100,64 @@ fun StatusDashboardScreen(
                 .padding(8.dp),
         ) {
             // Top bar: Ghost mascot + connection badge
-            if (isPro) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 8.dp, vertical = 4.dp),
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        GhostMascot(
-                            state = uiState.agentStatus.state,
-                            skin = uiState.activeSkin,
-                            modifier = Modifier.size(32.dp),
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            text = "Agent Code",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.onBackground,
-                        )
-                    }
-                    ConnectionBadge(
-                        state = uiState.connectionState,
-                        instanceName = uiState.agentStatus.instanceName,
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    GhostMascot(
+                        state = uiState.agentStatus.state,
+                        skin = uiState.activeSkin,
+                        modifier = Modifier.size(32.dp),
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        text = "Agent Code",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onBackground,
                     )
                 }
+                ConnectionBadge(
+                    state = uiState.connectionState,
+                    instanceName = uiState.agentStatus.instanceName,
+                )
             }
 
             when {
-                orderedSessions.size >= 2 -> {
-                    // 2x2 grid (both portrait and landscape)
-                    val rows = orderedSessions.chunked(2)
+                orderedSessions.isNotEmpty() -> {
+                    // Dynamic grid: pick columns based on count
+                    // 1=1col, 2=2col, 3-4=2col, 5-6=3col, 7-9=3col, 10=3col (last row has ghost)
+                    val cols = when {
+                        orderedSessions.size <= 1 -> 1
+                        orderedSessions.size <= 4 -> 2
+                        else -> 3
+                    }
+
+                    // For single session, show mascot above
+                    if (orderedSessions.size == 1) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(0.35f),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            GhostMascot(
+                                state = orderedSessions.first().state,
+                                skin = uiState.activeSkin,
+                                modifier = Modifier
+                                    .fillMaxHeight(0.85f)
+                                    .aspectRatio(1f),
+                            )
+                        }
+                    }
+
+                    val rows = orderedSessions.chunked(cols)
+                    val showMascotInLastRow = orderedSessions.size > 1 &&
+                            rows.last().size < cols && orderedSessions.size % cols != 0
+
                     rows.forEachIndexed { rowIdx, row ->
                         Row(
                             modifier = Modifier
@@ -141,85 +166,44 @@ fun StatusDashboardScreen(
                             horizontalArrangement = Arrangement.spacedBy(4.dp),
                         ) {
                             row.forEachIndexed { colIdx, session ->
-                                val slotIdx = rowIdx * 2 + colIdx
-                                val isSelected = selectedSlot == slotIdx
-
+                                val slotIdx = rowIdx * cols + colIdx
+                                SessionSlot(
+                                    session = session,
+                                    slotIdx = slotIdx,
+                                    selectedSlot = selectedSlot,
+                                    slotOrder = slotOrder,
+                                    onSlotOrderChanged = { slotOrder = it },
+                                    onSelectedSlotChanged = { selectedSlot = it },
+                                    onSessionTap = onSessionTap,
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .fillMaxHeight()
+                                        .padding(vertical = 2.dp),
+                                )
+                            }
+                            // Fill empty slots in last row: mascot in first empty, spacers for rest
+                            if (showMascotInLastRow && rowIdx == rows.size - 1) {
                                 Box(
                                     modifier = Modifier
                                         .weight(1f)
                                         .fillMaxHeight()
-                                        .padding(vertical = 2.dp)
-                                        .then(
-                                            if (isSelected) Modifier.background(
-                                                ClaudeAccent.copy(alpha = 0.15f)
-                                            ) else Modifier
-                                        )
-                                        .pointerInput(slotIdx) {
-                                            detectTapGestures(
-                                                onLongPress = {
-                                                    selectedSlot = if (isSelected) -1 else slotIdx
-                                                },
-                                                onTap = {
-                                                    if (selectedSlot >= 0 && selectedSlot != slotIdx) {
-                                                        // Swap slots
-                                                        val newOrder = slotOrder.toMutableList()
-                                                        val fromIdx = selectedSlot
-                                                        val toIdx = slotIdx
-                                                        if (fromIdx < newOrder.size && toIdx < newOrder.size) {
-                                                            val tmp = newOrder[fromIdx]
-                                                            newOrder[fromIdx] = newOrder[toIdx]
-                                                            newOrder[toIdx] = tmp
-                                                            slotOrder = newOrder
-                                                        }
-                                                        selectedSlot = -1
-                                                    } else if (selectedSlot < 0) {
-                                                        // Tap to focus — full-screen this session
-                                                        onSessionTap?.invoke(session.sessionId)
-                                                    }
-                                                },
-                                            )
-                                        },
+                                        .padding(vertical = 2.dp),
+                                    contentAlignment = Alignment.Center,
                                 ) {
-                                    SessionCard(
-                                        status = session,
-                                        modifier = Modifier.fillMaxSize(),
+                                    GhostMascot(
+                                        state = uiState.agentStatus.state,
+                                        skin = uiState.activeSkin,
+                                        modifier = Modifier
+                                            .fillMaxSize(0.75f)
+                                            .aspectRatio(1f),
                                     )
-                                    // Selection indicator
-                                    if (isSelected) {
-                                        Text(
-                                            text = "TAP TARGET TO SWAP",
-                                            fontSize = 9.sp,
-                                            color = ClaudeAccent,
-                                            modifier = Modifier
-                                                .align(Alignment.BottomCenter)
-                                                .padding(bottom = 2.dp),
-                                        )
-                                    }
+                                }
+                                // Any remaining empty slots
+                                repeat(cols - row.size - 1) {
+                                    Spacer(Modifier.weight(1f))
                                 }
                             }
-                            if (row.size < 2) {
-                                Spacer(Modifier.weight(1f))
-                            }
                         }
-                    }
-                }
-                orderedSessions.size == 1 -> {
-                    // Single session: full terminal pane — tap to focus
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(1f)
-                            .padding(vertical = 2.dp)
-                            .pointerInput(Unit) {
-                                detectTapGestures(
-                                    onTap = { onSessionTap?.invoke(orderedSessions.first().sessionId) }
-                                )
-                            },
-                    ) {
-                        SessionCard(
-                            status = orderedSessions.first(),
-                            modifier = Modifier.fillMaxSize(),
-                        )
                     }
                 }
                 else -> {
@@ -275,6 +259,64 @@ fun StatusDashboardScreen(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun SessionSlot(
+    session: AgentStatus,
+    slotIdx: Int,
+    selectedSlot: Int,
+    slotOrder: List<String>,
+    onSlotOrderChanged: (List<String>) -> Unit,
+    onSelectedSlotChanged: (Int) -> Unit,
+    onSessionTap: ((String) -> Unit)?,
+    modifier: Modifier = Modifier,
+) {
+    val isSelected = selectedSlot == slotIdx
+    Box(
+        modifier = modifier
+            .then(
+                if (isSelected) Modifier.background(
+                    ClaudeAccent.copy(alpha = 0.15f)
+                ) else Modifier
+            )
+            .pointerInput(slotIdx) {
+                detectTapGestures(
+                    onLongPress = {
+                        onSelectedSlotChanged(if (isSelected) -1 else slotIdx)
+                    },
+                    onTap = {
+                        if (selectedSlot >= 0 && selectedSlot != slotIdx) {
+                            val newOrder = slotOrder.toMutableList()
+                            if (selectedSlot < newOrder.size && slotIdx < newOrder.size) {
+                                val tmp = newOrder[selectedSlot]
+                                newOrder[selectedSlot] = newOrder[slotIdx]
+                                newOrder[slotIdx] = tmp
+                                onSlotOrderChanged(newOrder)
+                            }
+                            onSelectedSlotChanged(-1)
+                        } else if (selectedSlot < 0) {
+                            onSessionTap?.invoke(session.sessionId)
+                        }
+                    },
+                )
+            },
+    ) {
+        SessionCard(
+            status = session,
+            modifier = Modifier.fillMaxSize(),
+        )
+        if (isSelected) {
+            Text(
+                text = "TAP TARGET TO SWAP",
+                fontSize = 9.sp,
+                color = ClaudeAccent,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 2.dp),
+            )
         }
     }
 }

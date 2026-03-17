@@ -51,6 +51,12 @@ class StatusViewModel(
         sseClient.sendInput(sessionId, text)
     }
 
+    fun broadcastInput(text: String) {
+        uiState.value.sessions.keys.forEach { sessionId ->
+            sseClient.sendInput(sessionId, text)
+        }
+    }
+
     override fun onCleared() {
         super.onCleared()
         sseClient.disconnect()
