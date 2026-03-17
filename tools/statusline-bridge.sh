@@ -10,7 +10,7 @@
 #   }
 set -uo pipefail
 
-BRIDGE_URL="${CCSAVER_BRIDGE_URL:-http://localhost:4001}"
+BRIDGE_URL="${CCSAVER_BRIDGE_URL:-http://localhost:4002}"
 INPUT=$(cat)
 
 # Extract metrics and POST to bridge using Python (jq not available on all systems).

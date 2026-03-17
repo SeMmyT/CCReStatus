@@ -190,6 +190,30 @@ async def status_handler(request: web.Request) -> web.Response:
     return web.json_response(data)
 
 
+async def broadcast_input_handler(request: web.Request) -> web.Response:
+    """POST /broadcast — send input to all active sessions at once."""
+    try:
+        data = await request.json()
+    except (json.JSONDecodeError, Exception):
+        return web.json_response({"error": "invalid JSON"}, status=400)
+
+    text = data.get("text", "").strip()
+    if not text:
+        return web.json_response({"error": "empty input"}, status=400)
+
+    sessions: dict[str, StatusUpdate] = request.app["sessions"]
+    pending: dict[str, list[str]] = request.app["pending_input"]
+    sent_to = []
+    for session_id in sessions:
+        pending.setdefault(session_id, []).append(text)
+        sent_to.append(session_id)
+        notification = json.dumps({"session_id": session_id, "text": text})
+        _broadcast(request.app, f"INPUT:{notification}")
+
+    logger.info("Broadcast to %d sessions: %s", len(sent_to), text[:50])
+    return web.json_response({"accepted": True, "sent_to": sent_to}, status=202)
+
+
 async def input_submit_handler(request: web.Request) -> web.Response:
     """POST /session/{session_id}/input — queue user input from the phone."""
     session_id = request.match_info["session_id"]
@@ -326,6 +350,7 @@ def create_app(
     app.router.add_get("/events", sse_handler)
     app.router.add_get("/status", status_handler)
     app.router.add_post("/session/{session_id}/metrics", metrics_handler)
+    app.router.add_post("/broadcast", broadcast_input_handler)
     app.router.add_post("/session/{session_id}/input", input_submit_handler)
     app.router.add_get("/session/{session_id}/input", input_poll_handler)
     app.router.add_post("/session/{session_id}/customize", customize_handler)
